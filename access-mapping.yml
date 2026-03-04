@@ -1,0 +1,20 @@
+# access-mapping.yml
+# Maps groups to servers
+# Defines which groups have access to which servers
+
+access_mapping:
+  devops_team:
+    # devops_team members have access to all production servers
+    servers:
+      - digitalocean-web-01
+      - hetzner-db-01
+
+  # Additional group mappings:
+  # developers:
+  #   servers:
+  #     - digitalocean-web-01
+  #
+  # sre_team:
+  #   servers:
+  #     - digitalocean-web-01
+  #     - hetzner-db-01

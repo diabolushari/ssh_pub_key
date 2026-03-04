@@ -1,0 +1,4 @@
+{
+    "ansible.python.interpreterPath": "c:\\Users\\harik\\.local\\bin\\python3.14.exe",
+    "python-envs.defaultEnvManager": "ms-python.python:system"
+}

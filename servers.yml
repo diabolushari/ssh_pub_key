@@ -1,0 +1,29 @@
+# servers.yml
+# Authoritative inventory of all managed servers
+# Each server must have a unique identifier and connection details
+
+servers:
+  digitalocean-web-01:
+    ip_address: 206.189.142.129
+    provider: digitalocean
+    region: nyc3
+    environment: production
+    os: ubuntu-22.04
+    description: Primary web server
+
+  hetzner-db-01:
+    ip_address: 128.140.6.229
+    provider: hetzner
+    region: fsn1-dc14
+    environment: production
+    os: ubuntu-22.04
+    description: Primary database server
+
+  # Add additional servers here as needed
+  # digitalocean-web-02:
+  #   ip_address: 1.2.3.4
+  #   provider: digitalocean
+  #   region: nyc3
+  #   environment: production
+  #   os: ubuntu-22.04
+  #   description: Secondary web server

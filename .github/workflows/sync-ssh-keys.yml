@@ -1,0 +1,79 @@
+name: Sync SSH Keys
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'servers.yml'
+      - 'groups.yml'
+      - 'access-mapping.yml'
+      - 'groups/**'
+      - 'ansible/**'
+      - '.github/workflows/sync-ssh-keys.yml'
+
+jobs:
+  validate:
+    name: Validate configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Validate YAML syntax
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('servers.yml')); print('✓ servers.yml valid')"
+          python3 -c "import yaml; yaml.safe_load(open('groups.yml')); print('✓ groups.yml valid')"
+          python3 -c "import yaml; yaml.safe_load(open('access-mapping.yml')); print('✓ access-mapping.yml valid')"
+
+      - name: Validate Ansible playbook syntax
+        run: |
+          sudo apt update && sudo apt install -y ansible
+          ansible-playbook --syntax-check ansible/playbook.yml
+
+  update-servers:
+    name: Deploy to servers
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt install -y ansible git python3-yaml
+
+      - name: Setup SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          # SSH_PRIVATE_KEY should be stored as a GitHub secret
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          # Add known hosts to avoid interactive prompt
+          ssh-keyscan -H 206.189.142.129 >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H 128.140.6.229 >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run Ansible playbook (dynamic inventory)
+        run: |
+          cd ansible
+          ansible-playbook -i dynamic_inventory.py playbook.yml -v
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+
+  notify:
+    name: Notify deployment status
+    runs-on: ubuntu-latest
+    needs: [validate, update-servers]
+    if: always()
+    steps:
+      - name: Deployment status
+        run: |
+          if [ "${{ needs.update-servers.result }}" == "success" ]; then
+            echo "✓ SSH keys successfully synced to all servers"
+          else
+            echo "✗ SSH key synchronization failed"
+            exit 1
+          fi

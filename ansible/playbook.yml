@@ -1,0 +1,123 @@
+---
+# ansible/playbook.yml
+# Centralized SSH key sync playbook with dynamic inventory and group-based access
+
+- name: Synchronize SSH keys from repository
+  hosts: servers
+  become: true
+  vars:
+    # URL of the repository (should contain servers.yml, groups.yml, access-mapping.yml, and groups/ directories)
+    ssh_repo_url: 'git@github.com:your-org/ssh-keys.git'
+    ssh_repo_dest: '/tmp/ssh_keys_repo'
+
+  tasks:
+    - name: Clone/update SSH key repository on target host
+      ansible.builtin.git:
+        repo: "{{ ssh_repo_url }}"
+        dest: "{{ ssh_repo_dest }}"
+        version: main
+        update: yes
+      register: git_result
+      changed_when: git_result.changed
+
+    - name: Load servers configuration
+      ansible.builtin.slurp:
+        src: "{{ ssh_repo_dest }}/servers.yml"
+      register: servers_file
+
+    - name: Load groups configuration
+      ansible.builtin.slurp:
+        src: "{{ ssh_repo_dest }}/groups.yml"
+      register: groups_file
+
+    - name: Load access mapping configuration
+      ansible.builtin.slurp:
+        src: "{{ ssh_repo_dest }}/access-mapping.yml"
+      register: access_mapping_file
+
+    - name: Parse configuration files
+      ansible.builtin.set_fact:
+        servers_config: "{{ servers_file.content | b64decode | from_yaml }}"
+        groups_config: "{{ groups_file.content | b64decode | from_yaml }}"
+        access_mapping_config: "{{ access_mapping_file.content | b64decode | from_yaml }}"
+
+    - name: Determine which groups apply to this server
+      ansible.builtin.set_fact:
+        applicable_groups: "{{ applicable_groups | default([]) + [item.key] }}"
+      loop: "{{ access_mapping_config.access_mapping | dict2items }}"
+      when: inventory_hostname in item.value.servers
+
+    - name: Collect Linux users from applicable groups
+      ansible.builtin.set_fact:
+        target_linux_users: "{{ target_linux_users | default([]) + item_users }}"
+      vars:
+        item_users: "{{ groups_config.groups[item].linux_users }}"
+      loop: "{{ applicable_groups }}"
+
+    - name: Remove duplicates from target users list
+      ansible.builtin.set_fact:
+        target_linux_users: "{{ target_linux_users | unique }}"
+
+    - name: Collect SSH keys for each applicable group
+      block:
+        - name: Find public key files for group "{{ item }}"
+          ansible.builtin.find:
+            paths: "{{ ssh_repo_dest }}/groups/{{ item }}"
+            patterns: "*.pub"
+            file_type: file
+          register: group_keyfiles
+          when: item is defined
+
+        - name: Read public key contents for group "{{ item }}"
+          ansible.builtin.set_fact:
+            "keys_for_group_{{ item | replace('-', '_') }}": "{{ group_keyfiles.files | map(attribute='path') | map('lookup', 'file') | list }}"
+          when: group_keyfiles.skipped is not defined or not group_keyfiles.skipped
+      loop: "{{ applicable_groups }}"
+
+    - name: Build merged key list for each Linux user
+      ansible.builtin.set_fact:
+        keys_by_user: "{{ keys_by_user | default({}) | combine({item: merged_keys}) }}"
+      vars:
+        merged_keys: >
+          {%- set keys = [] -%}
+          {%- for group in applicable_groups -%}
+            {%- set group_keys_var = 'keys_for_group_' + group | replace('-', '_') -%}
+            {%- if vars.get(group_keys_var) -%}
+              {%- set _ = keys.extend(vars[group_keys_var]) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ keys | unique }}
+      loop: "{{ target_linux_users }}"
+
+    - name: Deploy SSH keys and authorized_keys for each user
+      block:
+        - name: Determine home directory of "{{ item }}"
+          ansible.builtin.command: "getent passwd {{ item }} | cut -d: -f6"
+          register: home_dir
+          changed_when: false
+          failed_when: home_dir.rc != 0
+
+        - name: Ensure .ssh directory exists for "{{ item }}"
+          ansible.builtin.file:
+            path: "{{ home_dir.stdout }}/.ssh"
+            state: directory
+            owner: "{{ item }}"
+            group: "{{ item }}"
+            mode: '0700'
+
+        - name: Write authorized_keys file for "{{ item }}"
+          ansible.builtin.copy:
+            content: "{{ keys_by_user[item] | default([]) | join('\n') }}\n"
+            dest: "{{ home_dir.stdout }}/.ssh/authorized_keys"
+            owner: "{{ item }}"
+            group: "{{ item }}"
+            mode: '0600'
+            force: yes
+            backup: no
+          register: keys_deployed
+      loop: "{{ target_linux_users }}"
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg: "Keys deployed for server {{ inventory_hostname }}: groups={{ applicable_groups }}, users={{ target_linux_users }}"
+

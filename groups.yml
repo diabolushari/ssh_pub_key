@@ -1,0 +1,21 @@
+# groups.yml
+# Define access groups and which Linux users they map to
+# Each group represents an employee team or role
+
+groups:
+  devops_team:
+    description: DevOps team members with admin access
+    linux_users:
+      - devops
+
+  # Additional groups can be added:
+  # developers:
+  #   description: Application developers with limited SSH access
+  #   linux_users:
+  #     - appuser
+  #
+  # sre_team:
+  #   description: Site Reliability Engineers
+  #   linux_users:
+  #     - devops
+  #     - sre
