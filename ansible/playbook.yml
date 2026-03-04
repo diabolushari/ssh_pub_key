@@ -59,20 +59,10 @@
         target_linux_users: "{{ target_linux_users | unique }}"
 
     - name: Collect SSH keys for each applicable group
-      block:
-        - name: Find public key files for group "{{ item }}"
-          ansible.builtin.find:
-            paths: "{{ ssh_repo_dest }}/groups/{{ item }}"
-            patterns: "*.pub"
-            file_type: file
-          register: group_keyfiles
-          when: item is defined
-
-        - name: Read public key contents for group "{{ item }}"
-          ansible.builtin.set_fact:
-            "keys_for_group_{{ item | replace('-', '_') }}": "{{ group_keyfiles.files | map(attribute='path') | map('lookup', 'file') | list }}"
-          when: group_keyfiles.skipped is not defined or not group_keyfiles.skipped
+      ansible.builtin.include_tasks: tasks/collect_group_keys.yml
       loop: "{{ applicable_groups }}"
+      loop_control:
+        loop_var: item
 
     - name: Build merged key list for each Linux user
       ansible.builtin.set_fact:
@@ -90,32 +80,10 @@
       loop: "{{ target_linux_users }}"
 
     - name: Deploy SSH keys and authorized_keys for each user
-      block:
-        - name: Determine home directory of "{{ item }}"
-          ansible.builtin.command: "getent passwd {{ item }} | cut -d: -f6"
-          register: home_dir
-          changed_when: false
-          failed_when: home_dir.rc != 0
-
-        - name: Ensure .ssh directory exists for "{{ item }}"
-          ansible.builtin.file:
-            path: "{{ home_dir.stdout }}/.ssh"
-            state: directory
-            owner: "{{ item }}"
-            group: "{{ item }}"
-            mode: '0700'
-
-        - name: Write authorized_keys file for "{{ item }}"
-          ansible.builtin.copy:
-            content: "{{ keys_by_user[item] | default([]) | join('\n') }}\n"
-            dest: "{{ home_dir.stdout }}/.ssh/authorized_keys"
-            owner: "{{ item }}"
-            group: "{{ item }}"
-            mode: '0600'
-            force: yes
-            backup: no
-          register: keys_deployed
+      ansible.builtin.include_tasks: tasks/deploy_user_keys.yml
       loop: "{{ target_linux_users }}"
+      loop_control:
+        loop_var: item
 
     - name: Display deployment summary
       ansible.builtin.debug:

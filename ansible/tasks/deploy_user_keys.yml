@@ -1,0 +1,28 @@
+---
+# tasks/deploy_user_keys.yml
+# Deploys merged keys for a single user (item).
+
+- name: Determine home directory of "{{ item }}"
+  ansible.builtin.command: "getent passwd {{ item }} | cut -d: -f6"
+  register: home_dir
+  changed_when: false
+  failed_when: home_dir.rc != 0
+
+- name: Ensure .ssh directory exists for "{{ item }}"
+  ansible.builtin.file:
+    path: "{{ home_dir.stdout }}/.ssh"
+    state: directory
+    owner: "{{ item }}"
+    group: "{{ item }}"
+    mode: '0700'
+
+- name: Write authorized_keys file for "{{ item }}"
+  ansible.builtin.copy:
+    content: "{{ keys_by_user[item] | default([]) | join('\n') }}\n"
+    dest: "{{ home_dir.stdout }}/.ssh/authorized_keys"
+    owner: "{{ item }}"
+    group: "{{ item }}"
+    mode: '0600'
+    force: yes
+    backup: no
+  register: keys_deployed

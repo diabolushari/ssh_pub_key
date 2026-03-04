@@ -1,0 +1,16 @@
+---
+# tasks/collect_group_keys.yml
+# Finds .pub files for a group (item) and stores their contents in a group-specific fact.
+
+- name: Find public key files for group "{{ item }}"
+  ansible.builtin.find:
+    paths: "{{ ssh_repo_dest }}/groups/{{ item }}"
+    patterns: "*.pub"
+    file_type: file
+  register: group_keyfiles
+  when: item is defined
+
+- name: Read public key contents for group "{{ item }}"
+  ansible.builtin.set_fact:
+    "keys_for_group_{{ item | replace('-', '_') }}": "{{ group_keyfiles.files | map(attribute='path') | map('lookup', 'file') | list }}"
+  when: group_keyfiles is defined and (group_keyfiles.files | length) > 0
