@@ -21,5 +21,5 @@
 
 - name: Store collected keys for group "{{ item }}"
   ansible.builtin.set_fact:
-    "keys_for_group_{{ item | replace('-', '_') }}": "{{ query('sequence', 'start=0 end=' + ((key_content.results | length) - 1) | string) | map('extract', key_content.results, ['content']) | list }}"
+    "keys_for_group_{{ item | replace('-', '_') }}": "{{ key_content.results | map(attribute='content') | map('b64decode') | map('trim') | list }}"
   when: group_keyfiles is defined and (group_keyfiles.files | length) > 0
