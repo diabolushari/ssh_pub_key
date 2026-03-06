@@ -11,6 +11,15 @@
   when: item is defined
 
 - name: Read public key contents for group "{{ item }}"
+  ansible.builtin.slurp:
+    src: "{{ file_path }}"
+  register: key_content
+  loop: "{{ group_keyfiles.files | map(attribute='path') | list }}"
+  loop_control:
+    loop_var: file_path
+  when: group_keyfiles is defined and (group_keyfiles.files | length) > 0
+
+- name: Store collected keys for group "{{ item }}"
   ansible.builtin.set_fact:
-    "keys_for_group_{{ item | replace('-', '_') }}": "{{ group_keyfiles.files | map(attribute='path') | map('file') | list }}"
+    "keys_for_group_{{ item | replace('-', '_') }}": "{{ query('sequence', 'start=0 end=' + ((key_content.results | length) - 1) | string) | map('extract', key_content.results, ['content']) | list }}"
   when: group_keyfiles is defined and (group_keyfiles.files | length) > 0
