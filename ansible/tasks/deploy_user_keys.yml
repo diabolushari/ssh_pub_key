@@ -3,7 +3,7 @@
 # Deploys merged keys for a single user (item).
 
 - name: Determine home directory of "{{ item }}"
-  ansible.builtin.command: "getent passwd {{ item }} | cut -d: -f6"
+  ansible.builtin.shell: "getent passwd {{ item }} | cut -d: -f6"
   register: home_dir
   changed_when: false
   failed_when: home_dir.rc != 0
