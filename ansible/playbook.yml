@@ -7,7 +7,7 @@
   become: true
   vars:
     # URL of the repository (should contain servers.yml, groups.yml, access-mapping.yml, and groups/ directories)
-    ssh_repo_url: 'git@github.com:diabolushari/ssh_pub_key.git'
+    ssh_repo_url: 'https://github.com/diabolusHari/ssh_pub_key.git'
     ssh_repo_dest: '/tmp/ssh_keys_repo'
 
   tasks:
