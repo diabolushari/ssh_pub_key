@@ -12,5 +12,5 @@
 
 - name: Read public key contents for group "{{ item }}"
   ansible.builtin.set_fact:
-    "keys_for_group_{{ item | replace('-', '_') }}": "{{ group_keyfiles.files | map(attribute='path') | map('lookup', 'file') | list }}"
+    "keys_for_group_{{ item | replace('-', '_') }}": "{{ group_keyfiles.files | map(attribute='path') | map('file') | list }}"
   when: group_keyfiles is defined and (group_keyfiles.files | length) > 0
